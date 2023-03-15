@@ -6,14 +6,17 @@ Assembler script
 
 # Imports
 import re
+import subprocess
 import sys
 import argparse as ap
+
 # Code
 
 reads = []
 sequences = []
 
 
+# Build in possible class if needed
 def file_reader(input_file):
     """ Reads through the Fastq file and extracts the sequences and read numbers. """
     for line in open(input_file):
@@ -39,6 +42,30 @@ def file_reader(input_file):
 
         # Prints the sequence (REMOVE LATER)
         print(f"{myread} \n {myseq}".replace(' ', ''))
+
+
+def Alignment(input_file):
+    """ Uses minimap two to align the reads """
+    subprocess.call(f"minimap2/minimap2 -x ava-ont {input_file} {input_file} > overlaps.paf ", shell=True)
+    # Need to check which reads go in
+    # What is inside the overlaps.paf file
+
+    # Extract useful information from the file
+    # Prepare for read extraction and adjust some reads to make them longer in case of repeats
+
+
+def contig_creating():
+    """ Works on the contigs of the reads """
+    # Make reads into contigs
+    # Extend read if it is a repeat to make it anchor somewhere for better contigs
+    # Create super contigs
+    # Create scaffolds
+
+
+def Assembly():
+    """ Builds the genome assembly """
+    # Use the contigs and map against the original 'genome' OR
+    # Recreate the original genome through the contigs (research needed)
 
 
 def main():
