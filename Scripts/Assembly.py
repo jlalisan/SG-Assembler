@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import argparse as ap
+from paf_reader import parse_paf
 
 # Code
 
@@ -50,14 +51,15 @@ def Alignment(input_file):
     for files in args.fastq_files:
         filenames.append(files.split('.')[0])
 
+    # Runs the overlaps for all files.
     for index in range(len(filenames)):
         myfile = filenames[index]
         subprocess.call(f"minimap2/minimap2 -x ava-ont {input_file} {input_file} > {myfile}_overlaps.paf", shell=True)
-    # Need to check which reads go in
-    # What is inside the overlaps.paf file
 
-    # Extract useful information from the file
-    # Prepare for read extraction and adjust some reads to make them longer in case of repeats
+        # Creates a CSV file of the overlaps with the proper row names.
+        with open(f"{myfile}_overlaps.paf", "r+") as handle:
+            df = parse_paf(handle, dataframe=True)
+            df.to_csv(f"{myfile}_overlaps.csv", index=False)
 
 
 def contig_creating():
