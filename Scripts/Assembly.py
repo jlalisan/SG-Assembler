@@ -46,7 +46,13 @@ def file_reader(input_file):
 
 def Alignment(input_file):
     """ Uses minimap two to align the reads """
-    subprocess.call(f"minimap2/minimap2 -x ava-ont {input_file} {input_file} > overlaps.paf ", shell=True)
+    filenames = []
+    for files in args.fastq_files:
+        filenames.append(files.split('.')[0])
+
+    for index in range(len(filenames)):
+        myfile = filenames[index]
+        subprocess.call(f"minimap2/minimap2 -x ava-ont {input_file} {input_file} > {myfile}_overlaps.paf", shell=True)
     # Need to check which reads go in
     # What is inside the overlaps.paf file
 
@@ -69,7 +75,9 @@ def Assembly():
 
 
 def main():
-    file_reader('test.txt')
+    for files in args.fastq_files:
+        Alignment(files)
+    # file_reader('test.txt')
 
 
 if __name__ == '__main__':
