@@ -9,6 +9,11 @@ import re
 import subprocess
 import sys
 import argparse as ap
+
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+
 from paf_reader import parse_paf
 
 # Code
@@ -61,6 +66,21 @@ def Alignment(input_file):
             df = parse_paf(handle, dataframe=True)
             df.to_csv(f"{myfile}_overlaps.csv", index=False)
 
+def msa(file, output):
+    sequences = []
+    for line in open(file):
+        if line.startswith("A") or line.startswith("C") or line.startswith("G") or line.startswith("T"):
+            sequences.append(line.strip())
+
+    longest_length = max(len(s) for s in sequences)
+    padded_sequences = [s.ljust(longest_length, '-') for s in sequences]
+    records = (SeqRecord(Seq(s), id="alpha") for s in padded_sequences)
+
+    SeqIO.write(records, output, "fasta")
+
+    from Bio.Align.Applications import MuscleCommandline
+    cline = MuscleCommandline(input=file, out=output)
+    print(cline)
 
 def contig_creating():
     """ Works on the contigs of the reads """
@@ -79,6 +99,8 @@ def Assembly():
 def main():
     for files in args.fastq_files:
         Alignment(files)
+    #msa("b1_1.fq", "output.fasta")
+
     # file_reader('test.txt')
 
 
