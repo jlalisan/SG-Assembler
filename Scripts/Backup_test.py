@@ -360,3 +360,73 @@ if __name__ == '__main__':
     main()
 else:
     sys.exit("Program is ending")
+
+def overlapmatch(overlaps, fastq):
+    """
+    Okay, ik moet de start positie pakken en die opzoeken in de fastq, vanaf de start tot de end de sequentie eruit trekken
+    dan zelfde voor de target, en die samenvoegen onder read=73: ATCTGT enzo en dat tot de volgende read begin
+    """
+
+    endpos = []
+    targetpos = []
+    targetend = []
+    readnumq = []
+    readnumt = []
+    for_rev = []
+    startpos = []
+
+    sequences = []
+    complemented = {}
+    shortseqs = {}
+
+    for line in open(overlaps):
+        line = line.strip().split("\t")
+        endpos.append(line[3])
+        targetpos.append(line[7])
+        targetend.append(line[8])
+        readnumq.append(line[0])
+        readnumt.append(line[5])
+        for_rev.append(line[4])
+        startpos.append(line[2])
+
+    tada = open(fastq).readlines()
+
+    for index in range(len(startpos)):
+        for i, l in enumerate(tada):
+            if readnumq[index] in l and for_rev[index] == "+":
+                shortseqs[readnumq[index]] = tada[i+1].strip()
+            if readnumq[index] in l and for_rev[index] == "-":
+                complemented[readnumq[index]] = tada[i+1][::-1].strip()
+        for line
+
+    #print(shortseqs)
+    #print(complemented)
+    # if readnumquary is the same as readnum(in reads):
+    # read
+    # if read num starts with readnum query:
+    # if for_rev = +:
+    # sequence.append (READNAME) readnumquary[startpos:endpos] to readnumtarget[startpos:endpos]
+    # else:
+    # sequence.append (READNAME) readnumquary[startpos:endpos] to readnumtarget.reverse[startpos:endpos]
+    # Possibly add them to a sequence list, but it may get long
+    pass
+
+    # If sequence is + then append to map in forward way
+    # Else append to map in reverse way
+    # Make sure to append from the starting point in the sequence up until the ending point
+    # Only keep appending to read until the first readnum is different, then start new contig
+    # Keep first readnum name as contig name
+    #
+
+    # THIS WORKS BUT WITHOUT THE FORWARD OR REVERSE BUSINESS.
+    # sequences = ["ATGTACTTCGTTCAGTTACGTATTGCTAAGGTTAACACAAAGACACC",
+    #             "ATCATCAACTGGTGGTGAAATGACTGGGCAAGTGCTGTTGGTGCTGGAAATAA",
+    #             "AGTGTACTTCGTTCAGTTACGTATTGCTAAGGTTAACACAAAAGACACCGACAACTTTCTT",
+    #             "AAGTCTTTTGTCCTTCCTTCTTTCCAAAAGCATCTGACTTCTTAACTAG"]
+    ## Tranpose the list to group characters based on their position in words
+    ## Remove None values and sort alphabetically and use the mode function from statistics module
+    # totalmatch = "".join((list(map(lambda x: mode(sorted(filter(lambda v: v is not None, x))), (itertools.zip_longest(*sequences))))))
+    # print(totalmatch)
+
+
+overlapmatch("overlaps.paf", "b1_1.fq")
