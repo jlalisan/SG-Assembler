@@ -1,0 +1,6 @@
+Bio==1.5.9
+mappy==2.24
+matplotlib==3.7.1
+numpy==1.24.2
+pandas==2.0.0
+setuptools==65.5.0
