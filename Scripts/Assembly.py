@@ -1,120 +1,130 @@
-#!usr/bin/env python3
-
-"""
-Assembler script
-"""
-
-# Imports
-import re
-import subprocess
-import sys
-import argparse as ap
-
 from Bio import SeqIO
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
-
-from paf_reader import parse_paf
-
-# Code
-
-reads = []
-sequences = []
+from collections import defaultdict
 
 
-# Build in possible class if needed
-def file_reader(input_file):
-    """ Reads through the Fastq file and extracts the sequences and read numbers. """
-    for line in open(input_file):
-        # Isolates the sequences.
-        sequence = re.compile("^[A-Z]{5,}")
-        # Isolates the read numbers.
-        read = re.compile("read=\d*")
-        # Finds all the matches.
-        match = (read.findall(line.strip()))
-        seqmatch = (sequence.findall(line.strip()))
-        # Removes empty matches
-        if match != [] or seqmatch != []:
-            reads.append(''.join(match))
-            sequences.append(''.join(seqmatch))
-        while '' in reads and '' in sequences:
-            reads.remove("")
-            sequences.remove("")
-    # Orders the matches with each other.
-    for index in range(len(reads)):
-        myread = reads[index]
-        # Splits sequence in lines of 70 nucleotides.
-        myseq = (re.sub("(.{70})", "\\1\n", sequences[index], 0, re.DOTALL))
-
-        # Prints the sequence (REMOVE LATER)
-        print(f"{myread} \n {myseq}".replace(' ', ''))
-
-
-def Alignment(input_file):
-    """ Uses minimap two to align the reads """
-    filenames = []
-    for files in args.fastq_files:
-        filenames.append(files.split('.')[0])
-
-    # Runs the overlaps for all files.
-    for index in range(len(filenames)):
-        myfile = filenames[index]
-        subprocess.call(f"minimap2/minimap2 -x ava-ont {input_file} {input_file} > {myfile}_overlaps.paf", shell=True)
-
-        # Creates a CSV file of the overlaps with the proper row names.
-        with open(f"{myfile}_overlaps.paf", "r+") as handle:
-            df = parse_paf(handle, dataframe=True)
-            df.to_csv(f"{myfile}_overlaps.csv", index=False)
-
-def msa(file, output):
+def read_fastq(filename):
     sequences = []
-    for line in open(file):
-        if line.startswith("A") or line.startswith("C") or line.startswith("G") or line.startswith("T"):
-            sequences.append(line.strip())
-
-    longest_length = max(len(s) for s in sequences)
-    padded_sequences = [s.ljust(longest_length, '-') for s in sequences]
-    records = (SeqRecord(Seq(s), id="alpha") for s in padded_sequences)
-
-    SeqIO.write(records, output, "fasta")
-
-    from Bio.Align.Applications import MuscleCommandline
-    cline = MuscleCommandline(input=file, out=output)
-    print(cline)
-
-def contig_creating():
-    """ Works on the contigs of the reads """
-    # Make reads into contigs
-    # Extend read if it is a repeat to make it anchor somewhere for better contigs
-    # Create super contigs
-    # Create scaffolds
+    for record in SeqIO.parse(filename, "fastq"):
+        sequences.append(str(record.seq))
+    return sequences
 
 
-def Assembly():
-    """ Builds the genome assembly """
-    # Use the contigs and map against the original 'genome' OR
-    # Recreate the original genome through the contigs (research needed)
+def create_kmers(sequence, k):
+    for i in range(len(sequence) - k + 1):
+        yield sequence[i:i + k]
 
+
+def build_abruijn_graph(sequences, k):
+    graph = defaultdict(set)
+    for sequence in sequences:
+        kmers = create_kmers(sequence, k)
+        for kmer in kmers:
+            prefix = kmer[:-1]
+            suffix = kmer[1:]
+            graph[prefix].add(suffix)
+    return graph
+
+
+def generate_disjointigs(graph):
+    disjointigs = []
+    graph_items = list(graph.items())  # Create a copy of the dictionary items
+
+    for node, edges in graph_items:
+        if len(edges) == 1:
+            next_node = next(iter(edges))
+            if len(graph[next_node]) == 1:
+                disjointig = node + next_node[-1]
+                disjointigs.append(disjointig)
+                if node in graph:
+                    del graph[node]
+                if next_node in graph:
+                    del graph[next_node]
+
+                # Extend the disjointig
+                while next_node in graph and len(graph[next_node]) == 1:
+                    next_node = next(iter(graph[next_node]))
+                    disjointig += next_node[-1]
+                    del graph[next_node]
+
+                disjointigs.append(disjointig)
+
+    return disjointigs
+
+
+def concatenate_disjointigs(disjointigs):
+    concatenated_string = ''.join(disjointigs)
+    return concatenated_string
+
+
+def count_kmers(sequence, k):
+    kmers = { }
+    for i in range(len(sequence) - k + 1):
+        kmer = sequence[i:i + k]
+        kmers[kmer] = kmers.get(kmer, 0) + 1
+    return kmers
+
+
+def identify_repetitive_sequences(concatenated_disjointigs, k, threshold):
+    kmers = count_kmers(concatenated_disjointigs, k)
+    repetitive_kmers = {kmer: count for kmer, count in kmers.items() if count >= threshold}
+    return repetitive_kmers
+
+def resolve_bridged_repeats(repeat_graph, long_reads, k):
+    for read in long_reads:
+        kmers = list(create_kmers(read, k))
+        for i in range(len(kmers) - 1):
+            prefix = kmers[i][:-1]
+            suffix = kmers[i + 1][1:]
+            if prefix in repeat_graph and suffix in repeat_graph[prefix]:
+                repeat_graph[prefix].remove(suffix)
+                repeat_graph[prefix].add(kmers[i + 1])
+
+
+def create_repeat_graph(concatenated_disjointigs, k, threshold, long_reads):
+    repetitive_kmers = identify_repetitive_sequences(concatenated_disjointigs, k, threshold)
+    repeat_graph = defaultdict(set)
+    for kmer, count in repetitive_kmers.items():
+        prefix = kmer[:-1]
+        suffix = kmer[1:]
+        repeat_graph[prefix].add(suffix)
+    resolve_bridged_repeats(repeat_graph, long_reads, k)
+    return repeat_graph
+
+def traverse_repeat_graph(repeat_graph, long_reads):
+    assembled_contigs = []
+    contig_id = 1
+    for prefix, suffixes in repeat_graph.items():
+        for suffix in suffixes:
+            for read in long_reads:
+                if prefix in read and suffix in read:
+                    start = read.index(prefix)
+                    end = read.index(suffix) + len(suffix)
+                    contig = read[start:end]
+                    assembled_contigs.append((f"contig_{contig_id}", contig))
+                    contig_id += 1
+                    break
+    return assembled_contigs
+
+def write_fasta(contigs, output_file):
+    with open(output_file, "w") as f:
+        for contig_id, sequence in contigs:
+            f.write(f">{contig_id}\n")
+            f.write(f"{sequence}\n")
 
 def main():
-    for files in args.fastq_files:
-        Alignment(files)
-    #msa("b1_1.fq", "output.fasta")
+    filename = "test.fq"
+    k = 31
+    threshold = 12
+    output_file = 'mytiggies.fasta'
 
-    # file_reader('test.txt')
+    sequences = read_fastq(filename)
+    abruijn_graph = build_abruijn_graph(sequences, k)
+    disjointigs = generate_disjointigs(abruijn_graph)
+    concatenated_disjointigs = concatenate_disjointigs(disjointigs)
+    repeat_graph = create_repeat_graph(concatenated_disjointigs, k, threshold, sequences)
+    assembled_contigs = traverse_repeat_graph(repeat_graph, sequences)
+    write_fasta(assembled_contigs, output_file)
 
 
-if __name__ == '__main__':
-    argparser = ap.ArgumentParser(description="Arguments for the Assembly")
-    argparser.add_argument("-n", action="store",
-                           dest="n", required=True, type=int,
-                           help="Amount of cores to be used")
-    argparser.add_argument("fastq_files", action="store",
-                           nargs='+', help="At least one Minion file")
-    argparser.add_argument("-k", action="store", dest="k", required=False, type=int,
-                           default=5, help="Size of the k-mers")
-    args = argparser.parse_args()
-
+if __name__ == "__main__":
     main()
-else:
-    sys.exit("Program is ending")
