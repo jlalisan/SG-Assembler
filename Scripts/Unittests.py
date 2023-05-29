@@ -2,7 +2,8 @@ import os
 import pandas as pd
 import networkx as nx
 import unittest
-from Attempt_7 import read_fastq_file, parse_paf, overlap_graph
+from Attempt_7 import read_fastq_file, parse_paf, overlap_graph, remove_isolated_nodes, dfs, get_consensus_sequences
+
 
 class ReadFastqFileTest(unittest.TestCase):
     def setUp(self):
@@ -59,6 +60,7 @@ class ParsePafTest(unittest.TestCase):
         # Test case for a non-existent PAF file
         with self.assertRaises(FileNotFoundError):
             parse_paf(self.invalid_paf_file)
+
 
 class OverlapGraphTest(unittest.TestCase):
     def test_overlap_graph_valid_input(self):
@@ -137,6 +139,142 @@ class OverlapGraphTest(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             overlap_graph(sequences, overlaps_df)
+
+
+class RemoveIsolatedNodesTest(unittest.TestCase):
+    def test_remove_isolated_nodes_valid_graph(self):
+        # Test case for a valid graph
+        graph = nx.MultiDiGraph()
+        graph.add_node('A')
+        graph.add_node('B')
+        graph.add_edge('A', 'B')
+
+        expected_graph = nx.MultiDiGraph()
+        expected_graph.add_node('A')
+        expected_graph.add_node('B')
+        expected_graph.add_edge('A', 'B')
+
+        result_graph = remove_isolated_nodes(graph)
+        self.assertEqual(result_graph.nodes, expected_graph.nodes)
+        self.assertEqual(result_graph.edges, expected_graph.edges)
+
+    def test_remove_isolated_nodes_empty_graph(self):
+        # Test case for an empty graph
+        graph = nx.MultiDiGraph()
+
+        expected_graph = nx.MultiDiGraph()
+
+        result_graph = remove_isolated_nodes(graph)
+        self.assertEqual(result_graph.nodes, expected_graph.nodes)
+        self.assertEqual(result_graph.edges, expected_graph.edges)
+
+    def test_remove_isolated_nodes_invalid_graph_type(self):
+        # Test case for an invalid graph type
+        graph = nx.Graph()  # Using Graph instead of MultiDiGraph
+
+        with self.assertRaises(TypeError):
+            remove_isolated_nodes(graph)
+
+
+class DFSTest(unittest.TestCase):
+    def test_dfs_valid_graph(self):
+        # Test case for a valid graph
+        graph = nx.MultiDiGraph()
+        graph.add_node('A')
+        graph.add_node('B')
+        graph.add_node('C')
+        graph.add_node('D')
+        graph.add_edge('A', 'B', target_start=0, query_start=0)
+        graph.add_edge('B', 'C', target_start=1, query_start=1)
+        graph.add_edge('A', 'D', target_start=2, query_start=2)
+
+        expected_contigs = [['A', 'B', 'C', 'D']]
+
+        result_contigs = dfs(graph)
+        self.assertEqual(result_contigs, expected_contigs)
+
+    def test_dfs_multiple_contigs(self):
+        # Test case for multiple contigs in the graph
+        graph = nx.MultiDiGraph()
+        graph.add_node('A')
+        graph.add_node('B')
+        graph.add_node('C')
+        graph.add_node('D')
+        graph.add_edge('A', 'B', target_start=0, query_start=0)
+        graph.add_edge('C', 'D', target_start=1, query_start=0)
+
+        expected_contigs = [['A', 'B'], ['C', 'D']]
+
+        result_contigs = dfs(graph)
+        self.assertEqual(result_contigs, expected_contigs)
+
+    def test_dfs_empty_graph(self):
+        # Test case for an empty graph
+        graph = nx.MultiDiGraph()
+
+        expected_contigs = []
+
+        result_contigs = dfs(graph)
+        self.assertEqual(result_contigs, expected_contigs)
+
+    def test_dfs_invalid_graph_type(self):
+        # Test case for an invalid graph type
+        graph = nx.Graph()  # Using Graph instead of MultiDiGraph
+
+        with self.assertRaises(TypeError):
+            dfs(graph)
+
+
+class ConsensusSequenceTest(unittest.TestCase):
+    def test_get_consensus_sequences(self):
+        # Create a test graph
+        graph = nx.MultiDiGraph()
+
+        graph.add_node("A", sequence="ATCGTAGAT")
+        graph.add_node("B", sequence="ACCGTAG")
+        graph.add_node("C", sequence="TAATCGT")
+
+        graph.add_edge("A", "C", query_start=2, query_end=8,
+                       target_start=0, target_end=3)
+        graph.add_edge("B", "C", query_start=4, query_end=5,
+                       target_start=0, target_end=5)
+
+        # Define contigs
+        contigs = [["A", "C", "B"]]
+
+        # Define expected consensus sequences
+        expected_consensus_sequences = ["TAATATCGTAGAT"]
+
+        # Generate consensus sequences
+        result_consensus_sequences = get_consensus_sequences(graph, contigs)
+
+        # Compare the expected and result consensus sequences
+        self.assertEqual(expected_consensus_sequences, result_consensus_sequences)
+
+
+    def test_get_consensus_sequences_empty_contigs(self):
+        # Create a test graph
+        graph = nx.MultiDiGraph()
+
+        # Define an empty contigs list
+        contigs = []
+
+        # Test for expected ValueError
+        with self.assertRaises(ValueError):
+            get_consensus_sequences(graph, contigs)
+
+    def test_get_consensus_sequences_invalid_graph_type(self):
+        # Create an invalid graph type (using Graph instead of MultiDiGraph)
+        graph = nx.Graph()
+        graph.add_node('A', sequence='ACGT')
+
+        # Define a contig
+        contigs = [['A']]
+
+        # Test for expected TypeError
+        with self.assertRaises(TypeError):
+            get_consensus_sequences(graph, contigs)
+
 
 if __name__ == '__main__':
     unittest.main()
