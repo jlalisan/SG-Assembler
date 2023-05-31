@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 """
-visualise.py script to plot read lengths, GC content, quality scores, and sequence complexity of fastq files.
+visualise.py script to plot read lengths, GC content, quality scores, 
+and sequence complexity of fastq files.
 """
 
 __author__ = "Lisan Eisinga"
 __version__ = "2.4.0"
-__date__ = "-05-2023"
+__date__ = "27-05-2023"
 
 import collections
 import numpy as np
@@ -31,21 +32,21 @@ def plot_read_lengths(fastq_file):
     read_lengths = [len(record.seq) for record in SeqIO.parse(fastq_file, "fastq")]
 
     # Creates a histogram of the read lengths
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.hist(read_lengths, bins=50, color="#1f77b4", alpha=0.8, edgecolor="black")
+    _, axis = plt.subplots(figsize=(8, 6))
+    axis.hist(read_lengths, bins=50, color="#1f77b4", alpha=0.8, edgecolor="black")
 
     # Sets the labels and title of the plot
-    ax.set_xlabel("Read Length", fontsize=14)
-    ax.set_ylabel("Count", fontsize=14)
-    ax.set_title(f"Read length distribution of {fastq_file}", fontsize=16)
+    axis.set_xlabel("Read Length", fontsize=14)
+    axis.set_ylabel("Count", fontsize=14)
+    axis.set_title(f"Read length distribution of {fastq_file}", fontsize=16)
 
     # Sets the tick size and removes the top and right spines
-    ax.tick_params(axis="both", which="major", labelsize=12)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    axis.tick_params(axis="both", which="major", labelsize=12)
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
 
     # Sets the y-axis to a logarithmic scale
-    ax.set_yscale("log")
+    axis.set_yscale("log")
 
     # Saves the plot with a name based on the FastQ file name and displays it
     plt.savefig(f"read_lengths_{fastq_file}.png")
@@ -71,20 +72,21 @@ def plot_gc_content(filename):
     avg_gc = sum(gc_content) / len(gc_content)
 
     # Plots the histogram of GC content distribution.
-    fig, ax = plt.subplots()
-    ax.hist(gc_content, bins=np.arange(0, 101, 1), density=True, edgecolor="black", linewidth=0.5)
-    ax.set_xticks(np.arange(0, 101, 5))
-    ax.set_xlabel("GC Percentage")
-    ax.set_ylabel("Density")
-    ax.set_title(f"GC Content Distribution of {filename}")
-    ax.set_ylim(0, max(ax.get_yticks()) * 1.1)
+    _, axis = plt.subplots()
+    axis.hist(gc_content, bins=np.arange(0, 101, 1), density=True,
+              edgecolor="black", linewidth=0.5)
+    axis.set_xticks(np.arange(0, 101, 5))
+    axis.set_xlabel("GC Percentage")
+    axis.set_ylabel("Density")
+    axis.set_title(f"GC Content Distribution of {filename}")
+    axis.set_ylim(0, max(axis.get_yticks()) * 1.1)
 
     # Creates the normal distribution.
     mu, std = norm.fit(gc_content)
     x = np.linspace(mu - 3 * std, mu + 3 * std, 1000)
     p = norm.pdf(x, mu, std)
-    ax.plot(x, p, "k", linewidth=2)
-    ax.set_xlim(20, 50)
+    axis.plot(x, p, "k", linewidth=2)
+    axis.set_xlim(20, 50)
 
     # Saves the plot as a PNG file and displays it.
     plt.savefig(f"gc_content_{filename}.png")
@@ -121,10 +123,11 @@ def plot_quality_scores(fastq):
 
     # Sort the quality scores and plot them
     mydict = collections.OrderedDict(sorted(counts.items()))
-    fig, ax = plt.subplots(figsize=(18, 5))
+    _, axis = plt.subplots(figsize=(18, 5))
     clrs = plt.cm.Greys(np.linspace(0, 1, len(mydict)))
     clrs[0:25] = (0.2, 0.2, 0.2, 1.0)
-    barlist = ax.bar(range(len(sorted(mydict))), list(mydict.values()), align="center", color=clrs)
+    barlist = axis.bar(range(len(sorted(mydict))), list(mydict.values()),
+                       align="center", color=clrs)
 
     # Color the bars based on their quality score
     for i in range(len(barlist)):
@@ -136,13 +139,13 @@ def plot_quality_scores(fastq):
     # Add a legend and labels to the plot
     accepted_patch = plt.Rectangle((0, 0), 1, 1, fc="green")
     rejected_patch = plt.Rectangle((0, 0), 1, 1, fc="black")
-    ax.legend([accepted_patch, rejected_patch], ["Score above 20", "Score below 20"], loc="upper right", fontsize=12)
-    ax.set_xticks(range(len(mydict)))
-    ax.set_xticklabels(list(mydict.keys()), fontsize=12)
-    ax.set_title(f"The quality score frequencies of the {fastq} file", fontsize=16)
-    ax.set_xlabel("Scores of the bases", fontsize=14)
-    ax.set_ylabel("Total amount of bases", fontsize=14)
-    ax.grid(True)
+    axis.legend([accepted_patch, rejected_patch], ["Score above 20", "Score below 20"], loc="upper right", fontsize=12)
+    axis.set_xticks(range(len(mydict)))
+    axis.set_xticklabels(list(mydict.keys()), fontsize=12)
+    axis.set_title(f"The quality score frequencies of the {fastq} file", fontsize=16)
+    axis.set_xlabel("Scores of the bases", fontsize=14)
+    axis.set_ylabel("Total amount of bases", fontsize=14)
+    axis.grid(True)
 
     # Save and show the plot
     plt.savefig(f"Quality_{fastq}.png")
@@ -181,7 +184,8 @@ def plot_sequence_complexity(fastq):
         complexities.append(calculate_sequence_complexity(str(seqrecord.seq)))
 
     # Plot histogram of sequence complexities
-    sns.histplot(complexities, bins=50, kde=True, color="black", edgecolor="black", linewidth=0.5)
+    sns.histplot(complexities, bins=50, kde=True, color="black", edgecolor="black",
+                 linewidth=0.5)
     plt.title(f"The sequence complexity of the {fastq} file", fontsize=16)
     plt.xlabel("Sequence complexity", fontsize=14)
     plt.ylabel("Density", fontsize=14)

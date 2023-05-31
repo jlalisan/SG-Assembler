@@ -11,28 +11,30 @@ Options:
   --graphics                   Display information using the graphics.py script [default: False]
 
 Author: Lisan Eisinga
-Version: 7.3
+Version: 7.5
 Date of Completion: 2023-05-27
 
 Input file formats:
 - fastq_file: FastQ file containing biological sequence and quality score information.
 """
 
-import visualise
+# Imports
+import sys
 import os
 import subprocess
-import sys
 import time
+import logging
 import networkx as nx
 import pandas as pd
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from docopt import docopt
-import logging
+import visualise
 
 
 def read_fastq_file(fastq_file):
     """
-    Reads a FastQ file and returns a dictionary with the sequence titles as keys and the sequences as values.
+    Reads a FastQ file and returns a dictionary with the sequence titles as keys
+    and the sequences as values.
 
     Parameters:
         fastq_file (str): The path to the FastQ file.
@@ -48,8 +50,8 @@ def read_fastq_file(fastq_file):
         raise FileNotFoundError(f"FastQ file {fastq_file} not found.")
 
     sequences = {}
-    with open(fastq_file) as f:
-        for title, seq, qual in FastqGeneralIterator(f):
+    with open(fastq_file) as fastq:
+        for title, seq, qual in FastqGeneralIterator(fastq):
             # Use the first element in order to avoid possible duplicated read_ids
             sequences[title.split()[0]] = seq
 
@@ -72,23 +74,32 @@ def create_paf(fastq_file):
         subprocess.CalledProcessError: If the "minimap2" command fails.
         Exception: If there is an error while creating the PAF file.
     """
-    if not os.path.exists(fastq_file):
-        raise FileNotFoundError(f"FastQ file {fastq_file} not found.")
+    try:
+        if not os.path.exists(fastq_file):
+            raise FileNotFoundError(f"FastQ file {fastq_file} not found.")
 
-    # Generate the PAF file name based on the FastQ file name
-    paf_file = f"{os.path.splitext(fastq_file)[0]}_overlaps.paf"
+        # Generate the PAF file name based on the FastQ file name
+        paf_file = f"{os.path.splitext(fastq_file)[0]}_overlaps.paf"
 
-    # Check if the PAF file already exists
-    if os.path.exists(paf_file):
-        logging.info(f"PAF file {paf_file} already exists.")
+        # Check if the PAF file already exists
+        if os.path.exists(paf_file):
+            logging.info("PAF file %s already exists.", paf_file)
+            return paf_file
+
+        # Create the PAF file
+        minimap_command = f"./minimap2/minimap2 -x --ava-ont {fastq_file} {fastq_file} > {paf_file}"
+        subprocess.run(minimap_command, shell=True, check=True)
+        logging.info("PAF file %s created.", paf_file)
+
         return paf_file
 
-    # Create the PAF file
-    minimap_command = f"./minimap2/minimap2 -x --ava-ont {fastq_file} {fastq_file} > {paf_file}"
-    subprocess.run(minimap_command, shell=True, check=True)
-    logging.info(f"PAF file {paf_file} created.")
+    except FileNotFoundError as error:
+        logging.error("FileNotFoundError: %s", str(error))
+        raise
 
-    return paf_file
+    except subprocess.CalledProcessError as error:
+        logging.error("CalledProcessError: %s", str(error))
+        raise
 
 
 def parse_paf(paf_file):
@@ -99,8 +110,8 @@ def parse_paf(paf_file):
         paf_file (str): The path to the PAF file.
 
     Returns:
-        pandas.DataFrame: A DataFrame with columns "query_id", "query_length", "query_start", "query_end", "strand",
-        "target_id", "target_length", "target_start", and "target_end".
+        pandas.DataFrame: A DataFrame with columns "query_id", "query_length", "query_start",
+        "query_end", "strand", "target_id", "target_length", "target_start", and "target_end".
 
     Raises:
         FileNotFoundError: If the PAF file does not exist.
@@ -110,10 +121,10 @@ def parse_paf(paf_file):
         raise FileNotFoundError(f"PAF file {paf_file} not found.")
 
     # Read the PAF file into a DataFrame
-    columns = ["query_id", "query_length", "query_start", "query_end", "strand", "target_id", "target_length",
-               "target_start", "target_end"]
+    columns = ["query_id", "query_length", "query_start", "query_end", "strand",
+               "target_id", "target_length", "target_start", "target_end"]
     paf_df = pd.read_csv(paf_file, sep="\t", header=None, usecols=range(9), names=columns)
-    logging.info(f"PAF file {paf_file} parsed.")
+    logging.info("PAF file %s parsed.", paf_file)
 
     return paf_df
 
@@ -131,7 +142,8 @@ def overlap_graph(sequences, overlaps):
 
     Raises:
         KeyError: If any required columns are missing in the overlaps DataFrame.
-        ValueError: If the sequence IDs in the overlaps DataFrame are not present in the sequences dictionary.
+        ValueError: If the sequence IDs in the overlaps DataFrame are not present
+        in the sequences dictionary.
     """
     try:
         # Create a directed multigraph
@@ -144,15 +156,15 @@ def overlap_graph(sequences, overlaps):
         # Add edges to the overlap graph
         for _, row in overlaps.iterrows():
             # Check if all required columns are present in the overlaps DataFrame
-            required_columns = ["query_id", "target_id", "query_length", "target_length", "query_start", "query_end",
-                                "target_start", "target_end", "strand"]
+            required_columns = ["query_id", "target_id", "query_length", "target_length",
+                                "query_start", "query_end", "target_start", "target_end", "strand"]
             if not all(column in row for column in required_columns):
                 raise KeyError("Missing required columns in the overlaps DataFrame.")
 
             query_id = row["query_id"]
             target_id = row["target_id"]
 
-            # Check if the sequence IDs in the overlaps DataFrame are present in the sequences dictionary
+            # Check if the sequence IDs in the overlaps DataFrame are present in the dict
             if query_id not in sequences or target_id not in sequences:
                 raise ValueError("Sequence ID not found in the sequences dictionary.")
 
@@ -184,10 +196,10 @@ def overlap_graph(sequences, overlaps):
 
         return graph
 
-    except KeyError as e:
-        raise KeyError(f"Missing required columns in the overlaps DataFrame: {str(e)}")
-    except ValueError as e:
-        raise ValueError(f"Sequence ID not found in the sequences dictionary: {str(e)}")
+    except KeyError as error:
+        raise KeyError(f"Missing required columns in the overlaps DataFrame: {str(error)}")
+    except ValueError as error:
+        raise ValueError(f"Sequence ID not found in the sequences dictionary: {str(error)}")
 
 
 def remove_isolated_nodes(graph):
@@ -215,8 +227,8 @@ def remove_isolated_nodes(graph):
 
         return graph
 
-    except TypeError as e:
-        raise TypeError(f"Invalid graph type: {str(e)}")
+    except TypeError as error:
+        raise TypeError(f"Invalid graph type: {str(error)}")
 
 
 def dfs(graph):
@@ -238,13 +250,15 @@ def dfs(graph):
             visited.add(node)  # Mark the current node as visited
 
             # Explore outgoing edges based on alignment information
-            outgoing_edges = sorted(graph.out_edges(node, keys=True), key=lambda edge: graph.edges[edge]['target_start'])
+            outgoing_edges = sorted(graph.out_edges(node, keys=True),
+                                    key=lambda edge: graph.edges[edge]['target_start'])
             for _, child, _ in outgoing_edges:
                 if child not in visited:
                     dfs_visit(child, path, visited)
 
             # Explore incoming edges based on alignment information
-            incoming_edges = sorted(graph.in_edges(node, keys=True), key=lambda edge: graph.edges[edge]['query_start'], reverse=True)
+            incoming_edges = sorted(graph.in_edges(node, keys=True),
+                                    key=lambda edge: graph.edges[edge]['query_start'], reverse=True)
             for parent, _, _ in incoming_edges:
                 if parent not in visited:
                     dfs_visit(parent, path, visited)
@@ -263,11 +277,12 @@ def dfs(graph):
 
         return contigs
 
-    except TypeError as e:
-        raise TypeError(f"Invalid graph type: {str(e)}")
+    except TypeError as error:
+        raise TypeError(f"Invalid graph type: {str(error)}")
 
 
 def get_consensus_sequences(graph, contigs):
+    """ Creates the contig sequences based on positions. """
     if not isinstance(graph, nx.MultiDiGraph):
         raise TypeError("Invalid graph type. Expected MultiDiGraph.")
 
@@ -280,6 +295,7 @@ def get_consensus_sequences(graph, contigs):
         covered_positions = set()
         significant_nodes = []
         insignificant_nodes = []
+        prev_node = None
         for i, node in enumerate(contig):
             if node in graph.nodes:
                 node_sequence = graph.nodes[node]["sequence"]
@@ -330,7 +346,8 @@ def get_consensus_sequences(graph, contigs):
                     sequence = list(significant_sequence) + sequence
                 else:
                     significant_sequence = graph.nodes[node]["sequence"][target_start:query_start]
-                    insert_index = 0 if prev_node == contig[0] else sequence.index(graph.nodes[prev_node]["sequence"][-1]) + target_start
+                    insert_index = 0 if prev_node == contig[0] else sequence.index(
+                        graph.nodes[prev_node]["sequence"][-1]) + target_start
                     sequence = list(significant_sequence) + sequence[:insert_index] + sequence[insert_index:]
 
         if sequence:
@@ -339,15 +356,27 @@ def get_consensus_sequences(graph, contigs):
     return consensus_sequences
 
 
+def write_to_file(filename, contigs):
+    """ Writes the contigs to a Fasta file."""
+    try:
+        with open(filename, 'w') as file:
+            for i, contig in enumerate(contigs):
+                header = f">contig_{i + 1}"
+                sequence = contig
+                file.write(f"{header}\n{sequence}\n")
+    except IOError:
+        logging.info("Error: Unable to write to file %s", filename)
+
+
 def main():
     """
     Perform the assembly process based on the provided command-line arguments.
     """
-    #arguments = docopt(__doc__)
-    fastq_file = 'b1_1.fq'
-    paf_file = 'final.paf'
-    output_file = 'output.fasta'
-    graphics = None
+    arguments = docopt(__doc__)
+    fastq_file = arguments["<fastq_file>"]
+    paf_file = arguments["--paf_file"]
+    output_file = arguments["--output_file"]
+    graphics = arguments["--graphics"]
 
     start = time.time()
     if not paf_file:
@@ -361,9 +390,8 @@ def main():
 
     logging.info("Creating overlap graph...")
     mygraph = overlap_graph(sequences, overlaps)
-    print(mygraph)
     mygraph = remove_isolated_nodes(mygraph)
-    print(mygraph)
+
     if mygraph.number_of_nodes() >= 999:
         try:
             # Set recursion limit to avoid stack overflow error
@@ -379,14 +407,28 @@ def main():
         logging.info("Error: Recursion limit exceeded. Unable to traverse the graph.")
         return
 
-    print(len(contigs))
+    if contigs:
+        logging.info("Generating consensus sequences...")
+        consensus_seqs = get_consensus_sequences(mygraph, contigs)
+
+        if not output_file:
+            base_name = os.path.splitext(fastq_file)[0]
+            output_file = f"{base_name}_contigs.fasta"
+
+        logging.info("Writing contigs to %s...", output_file)
+        write_to_file(consensus_seqs, output_file)
+
+    if graphics:
+        # Call the graphics functions from graphics.py
+        visualise.plot_read_lengths(fastq_file)
+        visualise.plot_gc_content(fastq_file)
+        visualise.plot_quality_scores(fastq_file)
+        visualise.plot_sequence_complexity(fastq_file)
+        visualise.count_duplicates(fastq_file)
 
     end = time.time()
-    logging.info(f"Assembly was finished in: {end - start} seconds")
+    logging.info("Assembly was finished in: %s seconds",  end - start)
 
-    contigsequences = get_consensus_sequences(mygraph, contigs)
-    for consensus in contigsequences:
-        print(len(consensus))
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
