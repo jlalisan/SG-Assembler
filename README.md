@@ -80,7 +80,7 @@ There are three scripts in the assembler, there is the 'assembly.py' which runs 
 The script itself can be called by a simple Python statement within the command line, as long as all the correct packages are installed. Make sure that the Python version used, is above Python 3.8
 
 ### Examples
-```Python Assembly.py <fastq\_file> [--paf\_file=<paf\_file>] [--output\_file=<output\_file>] [--graphics]```
+```Python Assembly.py <fastq_file> [--paf_file=<paf_file>] [--outputS_file=<output_file>] [--graphics]```
 This statement activates the 'assembly.py' script, this runs the visualization as well if requested. The first argument is the FastQ data set, this is a required argument, and requires a MinION data set, an example data set 'foo.fq' is present in the repository for testing. The second and third argument are not required. the PAF data set is created with MiniMap2 if it is not presented with the parameters, and the output data set is created from the FastQ name if not specified. The graphics can be shown with the visualization script only if the option is selected.
 
 | Parameter   | Required? | Description                        | Default |
@@ -90,7 +90,7 @@ This statement activates the 'assembly.py' script, this runs the visualization a
 | output_file | No        | Output data set for the assembly   | None    |
 | graphics    | No        | Visualize the FastQ data set       | None    |
 
-The parameters are listed above for usage. A complete run with the test data set 'foo.fq' can be done, this data however contains dummy data, which means the visualisations will not be optimal since the quality score for each base has been set to 'I'.
+The parameters are listed above for usage. A complete run with the test data set 'foo.fq' can be done, this data however contains dummy data, which means the visualizations will not be optimal since the quality score for each base has been set to 'I'.
 
 ## Contact
 For any questions or issues please contact the creator as specified below.
