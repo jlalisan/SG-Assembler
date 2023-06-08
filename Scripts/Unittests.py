@@ -14,9 +14,9 @@ import os
 import unittest
 import pandas as pd
 import networkx as nx
-from Assembly import read_fastq_file, create_paf, \
+from assembly import read_fastq_file, create_paf, \
     parse_paf, overlap_graph, remove_isolated_nodes, \
-    dfs, get_consensus_sequences, write_to_file
+    dfs, generate_sequence, write_to_file
 
 
 class ReadFastqFileTest(unittest.TestCase):
@@ -284,59 +284,27 @@ class DFSTest(unittest.TestCase):
             dfs(graph)
 
 
-class ConsensusSequenceTest(unittest.TestCase):
-    """Unit tests for the get_consensus_sequences function."""
-
-    def test_get_consensus_sequences(self):
-        """Test generating consensus sequences from a graph and contigs."""
-        # Create a test graph
+class GenerateSequenceTest(unittest.TestCase):
+    """ Unit test for the generation of sequences. """
+    def test_generate_sequence(self):
+        """ Tests to see it does not use the same node twice."""
+        # Create a graph
         graph = nx.MultiDiGraph()
+        graph.add_node('A', sequence='AT')
+        graph.add_node('B', sequence='TC')
+        graph.add_node('C', sequence='CG')
+        graph.add_edge('A', 'B', alignment_block_length=2)
+        graph.add_edge('B', 'C', alignment_block_length=2)
 
-        graph.add_node("A", sequence="ATCGTAGAT")
-        graph.add_node("B", sequence="ACCGTAG")
-        graph.add_node("C", sequence="TAATCGT")
+        # Create draft contigs
+        draft_contigs = [['A', 'B', 'C'], ['A', 'B', 'B', 'C']]
 
-        graph.add_edge("A", "C", query_start=2, query_end=8,
-                       target_start=0, target_end=3)
-        graph.add_edge("B", "C", query_start=4, query_end=5,
-                       target_start=0, target_end=5)
+        # Call the generate_sequence function
+        accurate_contigs = generate_sequence(graph, draft_contigs)
 
-        # Define contigs
-        contigs = [["A", "C", "B"]]
-
-        # Define expected consensus sequences
-        expected_consensus_sequences = ["TAATATCGTAGAT"]
-
-        # Generate consensus sequences
-        result_consensus_sequences = get_consensus_sequences(graph, contigs)
-
-        # Compare the expected and result consensus sequences
-        self.assertEqual(expected_consensus_sequences, result_consensus_sequences)
-
-    def test_get_consensus_sequences_empty_contigs(self):
-        """Test handling an empty contigs list."""
-        # Create a test graph
-        graph = nx.MultiDiGraph()
-
-        # Define an empty contigs list
-        contigs = []
-
-        # Test for expected ValueError
-        with self.assertRaises(ValueError):
-            get_consensus_sequences(graph, contigs)
-
-    def test_get_consensus_sequences_invalid_graph_type(self):
-        """Test handling an invalid graph type."""
-        # Create an invalid graph type (using Graph instead of MultiDiGraph)
-        graph = nx.Graph()
-        graph.add_node('A', sequence='ACGT')
-
-        # Define a contig
-        contigs = [['A']]
-
-        # Test for expected TypeError
-        with self.assertRaises(TypeError):
-            get_consensus_sequences(graph, contigs)
+        # Check the output
+        expected_contigs = ['ATCGCG', 'ATCGCG']
+        self.assertEqual(expected_contigs, accurate_contigs)
 
 
 class WriteToFileTest(unittest.TestCase):

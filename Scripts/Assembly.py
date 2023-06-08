@@ -17,15 +17,15 @@ Date of Completion: 2023-05-27
 Input file formats:
 - fastq_file: FastQ file containing biological sequence and quality score information.
 """
-
 # Imports
 import sys
 import os
 import subprocess
-import time
 import logging
 import networkx as nx
 import pandas as pd
+import psutil
+import cProfile
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from docopt import docopt
 import visualise
@@ -122,8 +122,9 @@ def parse_paf(paf_file):
 
     # Read the PAF file into a DataFrame
     columns = ["query_id", "query_length", "query_start", "query_end", "strand",
-               "target_id", "target_length", "target_start", "target_end"]
-    paf_df = pd.read_csv(paf_file, sep="\t", header=None, usecols=range(9), names=columns)
+               "target_id", "target_length", "target_start", "target_end",
+               "alignment_block_length", "residue_matches", "mapping_quality"]
+    paf_df = pd.read_csv(paf_file, sep="\t", header=None, usecols=range(12), names=columns)
     logging.info("PAF file %s parsed.", paf_file)
 
     return paf_df
@@ -157,7 +158,9 @@ def overlap_graph(sequences, overlaps):
         for _, row in overlaps.iterrows():
             # Check if all required columns are present in the overlaps DataFrame
             required_columns = ["query_id", "target_id", "query_length", "target_length",
-                                "query_start", "query_end", "target_start", "target_end", "strand"]
+                                "query_start", "query_end", "target_start", "target_end",
+                                "strand", "alignment_block_length", "residue_matches",
+                                "mapping_quality"]
             if not all(column in row for column in required_columns):
                 raise KeyError("Missing required columns in the overlaps DataFrame.")
 
@@ -175,6 +178,9 @@ def overlap_graph(sequences, overlaps):
             target_start = row["target_start"]
             target_end = row["target_end"]
             strand = row["strand"]
+            alignment_block_length = row["alignment_block_length"]
+            residue_matches = row["residue_matches"]
+            mapping_quality = row["mapping_quality"]
 
             # Calculate overlap length based on the given information
             overlap_len = min(query_end - query_start + 1, target_end - target_start + 1)
@@ -188,11 +194,16 @@ def overlap_graph(sequences, overlaps):
                 "strand": strand,
                 "query_length": query_len,
                 "target_length": target_len,
-                "overlap_len": overlap_len  # Ensure "overlap_len" attribute is present
+                "overlap_len": overlap_len,
+                "alignment_block_length" : alignment_block_length,
+                "residue_matches": residue_matches,
+                "mapping_quality": mapping_quality
             }
 
             if query_id != target_id:
-                graph.add_edge(query_id, target_id, **edge_attrs)
+                if not graph.has_edge(query_id, target_id):
+                    graph.add_edge(query_id, target_id)
+                graph.edges[query_id, target_id, 0].update(edge_attrs)
 
         return graph
 
@@ -236,7 +247,7 @@ def dfs(graph):
     Perform depth-first search traversal on the graph.
 
     Parameters:
-        graph (nx.DiGraph or nx.MultiDiGraph): A directed graph.
+        graph (nx.MultiDiGraph): A directed multi graph.
 
     Returns:
         list: A list of contigs (paths) in the graph with correct read order.
@@ -251,14 +262,25 @@ def dfs(graph):
 
             # Explore outgoing edges based on alignment information
             outgoing_edges = sorted(graph.out_edges(node, keys=True),
-                                    key=lambda edge: graph.edges[edge]['target_start'])
+                                    key=lambda edge: (
+                                        graph.edges[edge]['target_start'],
+                                        -graph.edges[edge]['target_end'],
+                                        -graph.edges[edge]['query_start'],
+                                        graph.edges[edge]['query_end']
+                                    ))
+
             for _, child, _ in outgoing_edges:
                 if child not in visited:
                     dfs_visit(child, path, visited)
 
             # Explore incoming edges based on alignment information
             incoming_edges = sorted(graph.in_edges(node, keys=True),
-                                    key=lambda edge: graph.edges[edge]['query_start'], reverse=True)
+                                    key=lambda edge: (
+                                        -graph.edges[edge]['query_start'],
+                                        graph.edges[edge]['query_end'],
+                                        graph.edges[edge]['target_start'],
+                                        -graph.edges[edge]['target_end']
+                                    ))
             for parent, _, _ in incoming_edges:
                 if parent not in visited:
                     dfs_visit(parent, path, visited)
@@ -266,14 +288,22 @@ def dfs(graph):
         contigs = []
         visited = set()  # Track visited nodes to handle disconnected components
 
-        # Find nodes with no incoming edges
-        start_nodes = [node for node in graph.nodes if not list(graph.in_edges(node))]
+        while len(visited) < len(graph.nodes):
+            # Find the node with the most outgoing edges among unvisited nodes
+            max_outgoing_edges = 0
+            start_node = None
+            for node in graph.nodes:
+                if node not in visited:
+                    outgoing_edges = graph.out_edges(node)
+                    num_outgoing_edges = len(outgoing_edges)
+                    if num_outgoing_edges > max_outgoing_edges:
+                        max_outgoing_edges = num_outgoing_edges
+                        start_node = node
 
-        for start_node in start_nodes:
-            if start_node not in visited:
+            if start_node is not None:
                 path = []  # Store the current path for each component
                 dfs_visit(start_node, path, visited)
-                contigs.append(path)
+                contigs.append(path[::-1])  # Reverse the path to get the correct read order
 
         return contigs
 
@@ -281,79 +311,66 @@ def dfs(graph):
         raise TypeError(f"Invalid graph type: {str(error)}")
 
 
-def get_consensus_sequences(graph, contigs):
-    """ Creates the contig sequences based on positions. """
-    if not isinstance(graph, nx.MultiDiGraph):
-        raise TypeError("Invalid graph type. Expected MultiDiGraph.")
+def generate_sequence(graph, draft_contigs):
+    """
+    Generates accurate sequences for contigs based on a graph.
 
-    if not contigs:
-        raise ValueError("Empty contigs list.")
+    Args:
+        graph (nx.MultiDiGraph): A directed multi graph.
+        draft_contigs (list): A list of contigs, where each contig is a list of node IDs.
 
-    consensus_sequences = []
-    for contig in contigs:
-        sequence = []
-        covered_positions = set()
-        significant_nodes = []
-        insignificant_nodes = []
-        prev_node = None
-        for i, node in enumerate(contig):
-            if node in graph.nodes:
-                node_sequence = graph.nodes[node]["sequence"]
-                edge_data = None
-                if i > 0:
-                    edge_data = graph.get_edge_data(prev_node, node)
-                    if edge_data is not None:
-                        target_start = edge_data[0].get("target_start", 0)
-                        target_end = edge_data[0].get("target_end", len(graph.nodes[prev_node]["sequence"]))
-                        query_start = edge_data[0].get("query_start", 0)
-                        query_end = edge_data[0].get("query_end", len(node_sequence))
-                        if target_end >= target_start and query_end >= query_start:
-                            significant_nodes.append((node, target_start, target_end))
-                            if node == contig[0]:
-                                uncovered_positions = range(target_end)
-                            else:
-                                uncovered_positions = [
-                                    j
-                                    for j in range(len(node_sequence))
-                                    if j not in covered_positions
-                                       and target_start <= j < target_end
-                                       and query_start <= j < query_end
-                                ]
-                            sequence.extend(node_sequence[pos] for pos in uncovered_positions)
-                            covered_positions.update(uncovered_positions)
-                        else:
-                            insignificant_nodes.append(node)
-                    else:
-                        insignificant_nodes.append(node)
-                else:
-                    significant_nodes.append((node, 0, len(node_sequence)))
-                    sequence.extend(node_sequence)
-                    covered_positions.update(range(len(node_sequence)))
-            else:
-                continue
+    Returns:
+        list: A list of accurate contig sequences.
 
-            prev_node = node  # Update prev_node for the next iteration
+    Raises:
+        KeyError: If a node or edge is not found in the graph.
+        IndexError: If the contig is empty or the last node is not found in the graph.
 
-        significant_nodes.sort(key=lambda x: x[1])  # Sort significant nodes based on target start
+    """
+    accurate_contigs = []
 
-        for node, target_start, target_end in significant_nodes:
-            edge_data = graph.get_edge_data(prev_node, node)
+    for contig in draft_contigs:
+        contig_sequence = ""
+
+        # Iterate over each node in the contig
+        for i in range(len(contig)):
+            current_node = contig[i]
+            next_node = contig[i + 1] if i < len(contig) - 1 else None
+
+            try:
+                # Get the edge data between current and next node
+                edge_data = graph.get_edge_data(current_node, next_node)
+            except KeyError:
+                raise KeyError("Node or edge not found in the graph.")
+
             if edge_data is not None:
-                query_start = edge_data[0].get("query_start", len(graph.nodes[node]["sequence"]))
-                query_end = edge_data[0].get("query_end", len(graph.nodes[node]["sequence"]))
-                if node == contig[0]:
-                    significant_sequence = graph.nodes[node]["sequence"][:query_end]
-                    sequence = list(significant_sequence) + sequence
+                alignment_block_length = edge_data[0].get('alignment_block_length', 0)
+
+                if i == 0:
+                    try:
+                        # Append sequence of the current node to the contig
+                        contig_sequence += graph.nodes[current_node]['sequence']
+                    except KeyError:
+                        raise KeyError("Node not found in the graph.")
                 else:
-                    significant_sequence = graph.nodes[node]["sequence"][target_start:query_start]
-                    insert_index = 0 if prev_node == contig[0] else sequence.index(
-                        graph.nodes[prev_node]["sequence"][-1]) + target_start
-                    sequence = list(significant_sequence) + sequence[:insert_index] + sequence[insert_index:]
+                    next_node_sequence = graph.nodes[next_node].get('sequence', "")
+                    if next_node_sequence and alignment_block_length > 0:
+                        # Extract the overlapping sequence from the next node
+                        overlap_sequence = next_node_sequence[:alignment_block_length]
+                        # Append the overlapping sequence to the contig
+                        contig_sequence += overlap_sequence
 
-        if sequence:
-            consensus_sequences.append("".join(sequence))
+            # Append remaining sequence if next node is None or has no sequence
+            if next_node is None or graph.nodes.get(next_node, {}).get('sequence') is None:
+                # Append sequence of the current node to the contig
+                contig_sequence += graph.nodes[current_node].get('sequence', "")
 
-    return consensus_sequences
+        # Add the accurate contig sequence to the result list
+        accurate_contigs.append(contig_sequence)
+
+    return accurate_contigs
+
+
 
 
 def write_to_file(filename, contigs):
@@ -362,7 +379,7 @@ def write_to_file(filename, contigs):
         with open(filename, 'w') as file:
             for i, contig in enumerate(contigs):
                 header = f">contig_{i + 1}"
-                sequence = contig
+                sequence = "".join(contig)
                 file.write(f"{header}\n{sequence}\n")
     except IOError:
         logging.info("Error: Unable to write to file %s", filename)
@@ -372,13 +389,15 @@ def main():
     """
     Perform the assembly process based on the provided command-line arguments.
     """
+    process = psutil.Process()
+    memory_before = process.memory_info().rss / (1024 * 1024)
+
     arguments = docopt(__doc__)
     fastq_file = arguments["<fastq_file>"]
     paf_file = arguments["--paf_file"]
     output_file = arguments["--output_file"]
     graphics = arguments["--graphics"]
 
-    start = time.time()
     if not paf_file:
         paf_file = create_paf(fastq_file)
 
@@ -390,7 +409,8 @@ def main():
 
     logging.info("Creating overlap graph...")
     mygraph = overlap_graph(sequences, overlaps)
-    mygraph = remove_isolated_nodes(mygraph)
+    print(mygraph)
+    #mygraph = remove_isolated_nodes(mygraph)
 
     if mygraph.number_of_nodes() >= 999:
         try:
@@ -409,14 +429,19 @@ def main():
 
     if contigs:
         logging.info("Generating consensus sequences...")
-        consensus_seqs = get_consensus_sequences(mygraph, contigs)
+        print(f"Total contigs: {len(contigs)}")
+        #for contig in contigs:
+        #    print(contig)
+        consensus_seqs = generate_sequence(mygraph, contigs)
+        for consensus in consensus_seqs:
+            print(len(consensus))
 
         if not output_file:
             base_name = os.path.splitext(fastq_file)[0]
             output_file = f"{base_name}_contigs.fasta"
 
         logging.info("Writing contigs to %s...", output_file)
-        write_to_file(consensus_seqs, output_file)
+        write_to_file(output_file, consensus_seqs)
 
     if graphics:
         # Call the graphics functions from graphics.py
@@ -426,10 +451,15 @@ def main():
         visualise.plot_sequence_complexity(fastq_file)
         visualise.count_duplicates(fastq_file)
 
-    end = time.time()
-    logging.info("Assembly was finished in: %s seconds",  end - start)
+    memory_after = process.memory_info().rss / (1024 * 1024)
+    logging.info("Memory usage: {:.2f} MB".format((memory_after - memory_before)))
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    #logging.basicConfig(level=logging.INFO)
+    profiler = cProfile.Profile()
+    profiler.enable()
     main()
+    profiler.disable()
+    profiler.dump_stats("performance.prof")
+
