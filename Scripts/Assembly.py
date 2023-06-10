@@ -2,30 +2,33 @@
 
 """
 Usage:
-  Assembly.py <fastq_file> [--paf_file=<paf_file>] [--output_file=<output_file>] [--graphics]
+  assembly.py <fastq_file> [--paf_file=<paf_file>] [--output_file=<output_file>] [--graphics]
+  assembly.py (-h | --help)
 
 Options:
-  -h --help                    Show this help message.
-  --paf_file=<paf_file>         Path to the PAF file [default: None]
-  --output_file=<output_file>   Path to the output FASTA file [default: None]
-  --graphics                   Display information using the graphics.py script [default: False]
+  -h --help                     Show this help message.
+  --paf_file=<paf_file>         Path to the PAF data set
+  --output_file=<output_file>   Path to the output Fasta data set
+  --graphics                    Display information using the graphics.py script [default: False]
 
 Author: Lisan Eisinga
 Version: 7.5
-Date of Completion: 2023-05-27
+Date of Completion: 06-09-2023
 
-Input file formats:
-- fastq_file: FastQ file containing biological sequence and quality score information.
+Input data set formats:
+- fastq_file: FastQ data set containing biological sequence and quality score information (MinION).
 """
+
 # Imports
 import sys
 import os
 import subprocess
 import logging
+import cProfile
+
 import networkx as nx
 import pandas as pd
 import psutil
-import cProfile
 from Bio.SeqIO.QualityIO import FastqGeneralIterator
 from docopt import docopt
 import visualise
@@ -33,25 +36,25 @@ import visualise
 
 def read_fastq_file(fastq_file):
     """
-    Reads a FastQ file and returns a dictionary with the sequence titles as keys
+    Reads a FastQ data set and returns a dictionary with the sequence titles as keys
     and the sequences as values.
 
     Parameters:
-        fastq_file (str): The path to the FastQ file.
+        fastq_file (str): The path to the FastQ data set.
 
     Returns:
         dict: A dictionary with the sequence titles as keys and the sequences as values.
 
     Raises:
-        FileNotFoundError: If the FastQ file does not exist.
-        Exception: If there is an error while reading the FastQ file.
+        FileNotFoundError: If the FastQ data set does not exist.
+        Exception: If there is an error while reading the FastQ data set.
     """
     if not os.path.exists(fastq_file):
-        raise FileNotFoundError(f"FastQ file {fastq_file} not found.")
+        raise FileNotFoundError(f"FastQ data set {fastq_file} not found.")
 
     sequences = {}
-    with open(fastq_file) as fastq:
-        for title, seq, qual in FastqGeneralIterator(fastq):
+    with open(fastq_file, "r", encoding="utf-8") as fastq:
+        for title, seq, _ in FastqGeneralIterator(fastq):
             # Use the first element in order to avoid possible duplicated read_ids
             sequences[title.split()[0]] = seq
 
@@ -60,36 +63,36 @@ def read_fastq_file(fastq_file):
 
 def create_paf(fastq_file):
     """
-    Create a PAF file from a FastQ file using the "minimap2" command-line tool.
-    If the PAF file already exists, it will not be recreated.
+    Create a PAF data set from a FastQ data set using the "minimap2" command-line tool.
+    If the PAF data set already exists, it will not be recreated.
 
     Parameters:
-        fastq_file (str): The path to the FastQ file.
+        fastq_file (str): The path to the FastQ data set.
 
     Returns:
-        str: The path to the PAF file.
+        str: The path to the PAF data set.
 
     Raises:
-        FileNotFoundError: If the FastQ file does not exist.
+        FileNotFoundError: If the FastQ data set does not exist.
         subprocess.CalledProcessError: If the "minimap2" command fails.
-        Exception: If there is an error while creating the PAF file.
+        Exception: If there is an error while creating the PAF data set.
     """
     try:
         if not os.path.exists(fastq_file):
-            raise FileNotFoundError(f"FastQ file {fastq_file} not found.")
+            raise FileNotFoundError(f"FastQ data set {fastq_file} not found.")
 
-        # Generate the PAF file name based on the FastQ file name
+        # Generate the PAF data set name based on the FastQ data set name
         paf_file = f"{os.path.splitext(fastq_file)[0]}_overlaps.paf"
 
-        # Check if the PAF file already exists
+        # Check if the PAF data set already exists
         if os.path.exists(paf_file):
-            logging.info("PAF file %s already exists.", paf_file)
+            logging.info("PAF data set %s already exists.", paf_file)
             return paf_file
 
-        # Create the PAF file
-        minimap_command = f"./minimap2/minimap2 -x --ava-ont {fastq_file} {fastq_file} > {paf_file}"
+        # Create the PAF data set
+        minimap_command = f"./minimap2/minimap2 -x ava-ont {fastq_file} {fastq_file} > {paf_file}"
         subprocess.run(minimap_command, shell=True, check=True)
-        logging.info("PAF file %s created.", paf_file)
+        logging.info("PAF data set %s created.", paf_file)
 
         return paf_file
 
@@ -104,29 +107,27 @@ def create_paf(fastq_file):
 
 def parse_paf(paf_file):
     """
-    Reads a PAF file and returns a pandas DataFrame with the relevant columns.
+    Reads a PAF data set and returns a pandas DataFrame with the relevant columns.
 
     Parameters:
-        paf_file (str): The path to the PAF file.
+        paf_file (str): The path to the PAF data set.
 
     Returns:
         pandas.DataFrame: A DataFrame with columns "query_id", "query_length", "query_start",
         "query_end", "strand", "target_id", "target_length", "target_start", and "target_end".
 
     Raises:
-        FileNotFoundError: If the PAF file does not exist.
-        Exception: If there is an error while parsing the PAF file.
+        FileNotFoundError: If the PAF data set does not exist.
+        Exception: If there is an error while parsing the PAF data set.
     """
     if not os.path.exists(paf_file):
-        raise FileNotFoundError(f"PAF file {paf_file} not found.")
+        raise FileNotFoundError(f"PAF data set {paf_file} not found.")
 
-    # Read the PAF file into a DataFrame
+    # Read the PAF data set into a DataFrame
     columns = ["query_id", "query_length", "query_start", "query_end", "strand",
                "target_id", "target_length", "target_start", "target_end",
                "alignment_block_length", "residue_matches", "mapping_quality"]
     paf_df = pd.read_csv(paf_file, sep="\t", header=None, usecols=range(12), names=columns)
-    logging.info("PAF file %s parsed.", paf_file)
-
     return paf_df
 
 
@@ -182,8 +183,16 @@ def overlap_graph(sequences, overlaps):
             residue_matches = row["residue_matches"]
             mapping_quality = row["mapping_quality"]
 
-            # Calculate overlap length based on the given information
-            overlap_len = min(query_end - query_start + 1, target_end - target_start + 1)
+            # Calculate overlap length based on the given information and strand
+            overlap_len = 0
+
+            if strand == "+":
+                overlap_len = min(query_end - query_start + 1, target_end - target_start + 1)
+            elif strand == "-":
+                overlap_len = min(query_end - query_start + 1, target_start - target_end + 1)
+
+            # Adjust overlap length if negative or greater than the minimum of query/target lengths
+            overlap_len = max(0, min(overlap_len, min(query_len, target_len)))
 
             # Create a dictionary of attributes for the edge
             edge_attrs = {
@@ -195,7 +204,7 @@ def overlap_graph(sequences, overlaps):
                 "query_length": query_len,
                 "target_length": target_len,
                 "overlap_len": overlap_len,
-                "alignment_block_length" : alignment_block_length,
+                "alignment_block_length": alignment_block_length,
                 "residue_matches": residue_matches,
                 "mapping_quality": mapping_quality
             }
@@ -257,16 +266,18 @@ def dfs(graph):
             raise TypeError("graph must be of type nx.MultiDiGraph")
 
         def dfs_visit(node, path, visited):
-            path.append(node)  # Append the current node to the path
-            visited.add(node)  # Mark the current node as visited
+            # Append the current node to the path
+            path.append(node)
+            # Mark the current node as visited
+            visited.add(node)
 
             # Explore outgoing edges based on alignment information
             outgoing_edges = sorted(graph.out_edges(node, keys=True),
                                     key=lambda edge: (
-                                        graph.edges[edge]['target_start'],
-                                        -graph.edges[edge]['target_end'],
-                                        -graph.edges[edge]['query_start'],
-                                        graph.edges[edge]['query_end']
+                                        graph.edges[edge]["target_start"],
+                                        -graph.edges[edge]["target_end"],
+                                        -graph.edges[edge]["query_start"],
+                                        graph.edges[edge]["query_end"]
                                     ))
 
             for _, child, _ in outgoing_edges:
@@ -276,17 +287,18 @@ def dfs(graph):
             # Explore incoming edges based on alignment information
             incoming_edges = sorted(graph.in_edges(node, keys=True),
                                     key=lambda edge: (
-                                        -graph.edges[edge]['query_start'],
-                                        graph.edges[edge]['query_end'],
-                                        graph.edges[edge]['target_start'],
-                                        -graph.edges[edge]['target_end']
+                                        -graph.edges[edge]["query_start"],
+                                        graph.edges[edge]["query_end"],
+                                        graph.edges[edge]["target_start"],
+                                        -graph.edges[edge]["target_end"]
                                     ))
             for parent, _, _ in incoming_edges:
                 if parent not in visited:
                     dfs_visit(parent, path, visited)
 
         contigs = []
-        visited = set()  # Track visited nodes to handle disconnected components
+        # Track visited nodes to handle disconnected components
+        visited = set()
 
         while len(visited) < len(graph.nodes):
             # Find the node with the most outgoing edges among unvisited nodes
@@ -301,9 +313,11 @@ def dfs(graph):
                         start_node = node
 
             if start_node is not None:
-                path = []  # Store the current path for each component
+                # Store the current path for each component
+                path = []
                 dfs_visit(start_node, path, visited)
-                contigs.append(path[::-1])  # Reverse the path to get the correct read order
+                # Reverse the path to get the correct read order
+                contigs.append(path)
 
         return contigs
 
@@ -311,113 +325,121 @@ def dfs(graph):
         raise TypeError(f"Invalid graph type: {str(error)}")
 
 
-def generate_sequence(graph, draft_contigs):
+def generate_sequence(graph, contigs):
     """
-    Generates accurate sequences for contigs based on a graph.
+    Generate sequences based on the overlap graph and DFS contigs.
 
-    Args:
-        graph (nx.MultiDiGraph): A directed multi graph.
-        draft_contigs (list): A list of contigs, where each contig is a list of node IDs.
+    Parameters:
+        graph (nx.MultiDiGraph): A directed multigraph representing the overlap graph.
+        contigs (list): A list of contigs (paths) in the graph with correct read order.
 
     Returns:
-        list: A list of accurate contig sequences.
-
-    Raises:
-        KeyError: If a node or edge is not found in the graph.
-        IndexError: If the contig is empty or the last node is not found in the graph.
-
+        list: A list of generated sequences.
     """
-    accurate_contigs = []
+    try:
+        if not isinstance(graph, nx.MultiDiGraph):
+            raise TypeError("graph must be of type nx.MultiDiGraph")
 
-    for contig in draft_contigs:
-        contig_sequence = ""
+        if not isinstance(contigs, list):
+            raise TypeError("contigs must be a list")
 
-        # Iterate over each node in the contig
-        for i in range(len(contig)):
-            current_node = contig[i]
-            next_node = contig[i + 1] if i < len(contig) - 1 else None
+        sequences = []
+        for contig in contigs:
+            sequence = ""
+            prev_node = None
+            for node in contig:
+                # Check if the node is covered by another node
+                if any(graph.out_edges(node)):
+                    continue  # Skip if the node has outgoing edges (covered by another node)
 
-            try:
-                # Get the edge data between current and next node
-                edge_data = graph.get_edge_data(current_node, next_node)
-            except KeyError:
-                raise KeyError("Node or edge not found in the graph.")
+                # Get the sequence of the node
+                node_sequence = graph.nodes[node]["sequence"]
+                overlap_len = 0
+                alignment_block_length = 0
 
-            if edge_data is not None:
-                alignment_block_length = edge_data[0].get('alignment_block_length', 0)
+                # Get the overlap length and alignment block length with the previous node
+                if prev_node is not None:
+                    edge_attrs = graph.get_edge_data(prev_node, node)
+                    if edge_attrs is not None:
+                        overlap_len = edge_attrs[0].get("overlap_len", 0)
+                        alignment_block_length = edge_attrs[0].get("alignment_block_length", 0)
 
-                if i == 0:
-                    try:
-                        # Append sequence of the current node to the contig
-                        contig_sequence += graph.nodes[current_node]['sequence']
-                    except KeyError:
-                        raise KeyError("Node not found in the graph.")
+                        # Adjust overlap length for reverse complement sequences
+                        if edge_attrs[0].get("strand") == "-":
+                            overlap_len = -(overlap_len + alignment_block_length)
+
+                # Append the relevant portion of the node's sequence to the overall sequence
+                if alignment_block_length > 0:
+                    sequence += node_sequence[overlap_len:overlap_len + alignment_block_length]
                 else:
-                    next_node_sequence = graph.nodes[next_node].get('sequence', "")
-                    if next_node_sequence and alignment_block_length > 0:
-                        # Extract the overlapping sequence from the next node
-                        overlap_sequence = next_node_sequence[:alignment_block_length]
-                        # Append the overlapping sequence to the contig
-                        contig_sequence += overlap_sequence
+                    sequence += node_sequence
 
-            # Append remaining sequence if next node is None or has no sequence
-            if next_node is None or graph.nodes.get(next_node, {}).get('sequence') is None:
-                # Append sequence of the current node to the contig
-                contig_sequence += graph.nodes[current_node].get('sequence', "")
+                # Update the previous node
+                prev_node = node
 
-        # Add the accurate contig sequence to the result list
-        accurate_contigs.append(contig_sequence)
+            sequences.append(sequence)
 
-    return accurate_contigs
+        return sequences
 
-
+    except TypeError as error:
+        raise TypeError(f"Invalid argument type: {str(error)}")
 
 
 def write_to_file(filename, contigs):
-    """ Writes the contigs to a Fasta file."""
+    """
+    Writes the contigs to a Fasta data set with individual contig numbering.
+
+    Parameters:
+        filename (str): The path to the output file.
+        contigs (list): A list of contigs to be written.
+
+    Raises:
+        IOError: If there is an error while writing to the data set.
+
+    Returns:
+        None
+    """
     try:
-        with open(filename, 'w') as file:
+        with open(filename, "w", encoding="utf-8") as file:
             for i, contig in enumerate(contigs):
                 header = f">contig_{i + 1}"
                 sequence = "".join(contig)
                 file.write(f"{header}\n{sequence}\n")
     except IOError:
-        logging.info("Error: Unable to write to file %s", filename)
+        logging.info("Error: Unable to write to data set %s", filename)
 
 
-def main():
+def main(args):
     """
     Perform the assembly process based on the provided command-line arguments.
     """
     process = psutil.Process()
     memory_before = process.memory_info().rss / (1024 * 1024)
 
-    arguments = docopt(__doc__)
-    fastq_file = arguments["<fastq_file>"]
-    paf_file = arguments["--paf_file"]
-    output_file = arguments["--output_file"]
-    graphics = arguments["--graphics"]
+    fastq_file = args["<fastq_file>"]
+    paf_file = args["--paf_file"]
+    output_file = args["--output_file"]
+    graphics = args["--graphics"]
 
     if not paf_file:
         paf_file = create_paf(fastq_file)
 
-    logging.info("Reading FastQ file...")
+    logging.info("Reading FastQ data set...")
     sequences = read_fastq_file(fastq_file)
 
-    logging.info("Parsing PAF file...")
+    logging.info("Parsing PAF data set...")
     overlaps = parse_paf(paf_file)
 
     logging.info("Creating overlap graph...")
     mygraph = overlap_graph(sequences, overlaps)
-    print(mygraph)
-    #mygraph = remove_isolated_nodes(mygraph)
+    mygraph = remove_isolated_nodes(mygraph)
 
     if mygraph.number_of_nodes() >= 999:
         try:
             # Set recursion limit to avoid stack overflow error
             sys.setrecursionlimit(mygraph.number_of_nodes())
         except RecursionError:
-            logging.info("Error: Recursion limit cannot be set. The graph is too large for traversal.")
+            logging.info("Error: Recursion limit cant be set. The graph is too big for traversal.")
             return
 
     logging.info("Traversing the graph...")
@@ -429,17 +451,10 @@ def main():
 
     if contigs:
         logging.info("Generating consensus sequences...")
-        print(f"Total contigs: {len(contigs)}")
-        #for contig in contigs:
-        #    print(contig)
         consensus_seqs = generate_sequence(mygraph, contigs)
-        for consensus in consensus_seqs:
-            print(len(consensus))
-
         if not output_file:
             base_name = os.path.splitext(fastq_file)[0]
             output_file = f"{base_name}_contigs.fasta"
-
         logging.info("Writing contigs to %s...", output_file)
         write_to_file(output_file, consensus_seqs)
 
@@ -452,14 +467,15 @@ def main():
         visualise.count_duplicates(fastq_file)
 
     memory_after = process.memory_info().rss / (1024 * 1024)
-    logging.info("Memory usage: {:.2f} MB".format((memory_after - memory_before)))
+    logging.info("Memory usage: %s MB", round((memory_after - memory_before), 2))
 
 
 if __name__ == "__main__":
-    #logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO)
     profiler = cProfile.Profile()
     profiler.enable()
-    main()
+    arguments = docopt(__doc__)
+    main(arguments)
     profiler.disable()
     profiler.dump_stats("performance.prof")
-
+    logging.info("Performance saved in performance.prof")
