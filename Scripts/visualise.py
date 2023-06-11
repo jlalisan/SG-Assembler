@@ -6,8 +6,8 @@ and sequence complexity of fastq files.
 """
 
 __author__ = "Lisan Eisinga"
-__version__ = "2.4.0"
-__date__ = "27-05-2023"
+__version__ = "2.4.2"
+__date__ = "11-06-2023"
 
 import collections
 import logging
@@ -58,12 +58,12 @@ def plot_read_lengths(fastq_file):
     logging.info("Read length plot of %s saved", fastq_file)
 
 
-def plot_gc_content(filename):
+def plot_gc_content(fastq_file):
     """
     Plots the GC content distribution of a FastQ file.
 
     Parameters:
-    filename (str): The path to the FastQ file.
+    fastq_file (str): The path to the FastQ file.
 
     Returns:
     None
@@ -71,10 +71,12 @@ def plot_gc_content(filename):
     # Create a new figure and axes for each plot
     plt.figure()
 
-    # Calculates the GC percentage for each record in the FastQ file.
+    # Ignores the DeprecationWarning
     warnings.filterwarnings("ignore", category=BiopythonDeprecationWarning)
+
+    # Calculates the GC percentage for each record in the FastQ file.
     gc_content = []
-    for record in SeqIO.parse(filename, "fastq"):
+    for record in SeqIO.parse(fastq_file, "fastq"):
         gc_content.append(GC(record.seq))
 
     # Calculates the average GC percentage.
@@ -87,7 +89,7 @@ def plot_gc_content(filename):
     axis.set_xticks(np.arange(0, 101, 5))
     axis.set_xlabel("GC Percentage")
     axis.set_ylabel("Density")
-    axis.set_title(f"GC Content Distribution of {filename}")
+    axis.set_title(f"GC Content Distribution of {fastq_file}")
     axis.set_ylim(0, max(axis.get_yticks()) * 1.1)
 
     # Creates the normal distribution.
@@ -98,19 +100,19 @@ def plot_gc_content(filename):
     axis.set_xlim(20, 50)
 
     # Saves the plot as a PNG file and displays it.
-    plt.savefig(f"gc_content_{filename}.png")
-    logging.info("GC plot of %s saved", filename)
+    plt.savefig(f"gc_content_{fastq_file}.png")
+    logging.info("GC plot of %s saved", fastq_file)
 
     # Prints the average GC percentage.
     logging.info("Average GC percentage: %s", round(avg_gc, 2))
 
 
-def plot_quality_scores(fastq):
+def plot_quality_scores(fastq_file):
     """
     Plots the quality score frequencies of a FastQ file.
 
     Parameters:
-    fastq (str): The path to the FastQ file.
+    fastq_file (str): The path to the FastQ file.
 
     Returns:
     None
@@ -124,7 +126,7 @@ def plot_quality_scores(fastq):
     total_bases = 0
 
     # Parse the FastQ file and count the quality scores
-    for seqrecord in SeqIO.parse(fastq, "fastq"):
+    for seqrecord in SeqIO.parse(fastq_file, "fastq"):
         for qual in seqrecord.letter_annotations["phred_quality"]:
             if qual not in counts:
                 counts[qual] = qual
@@ -142,11 +144,11 @@ def plot_quality_scores(fastq):
                        align="center", color=clrs)
 
     # Color the bars based on their quality score
-    for i in range(len(barlist)):
+    for i, mybar in enumerate(barlist):
         if i < 20:
-            barlist[i].set_color("black")
+            mybar.set_color("black")
         else:
-            barlist[i].set_color("green")
+            mybar.set_color("green")
 
     # Add a legend and labels to the plot
     accepted_patch = plt.Rectangle((0, 0), 1, 1, fc="green")
@@ -155,15 +157,15 @@ def plot_quality_scores(fastq):
                 loc="upper right", fontsize=12)
     axis.set_xticks(range(len(mydict)))
     axis.set_xticklabels(list(mydict.keys()), fontsize=12)
-    axis.set_title(f"The quality score frequencies of {fastq} (MinION quality score)",
+    axis.set_title(f"The quality score frequencies of {fastq_file} (MinION quality score)",
                    fontsize=16)
     axis.set_xlabel("Scores of the bases", fontsize=14)
     axis.set_ylabel("Total amount of bases", fontsize=14)
     axis.grid(True)
 
     # Save and show the plot
-    plt.savefig(f"Quality_{fastq}.png")
-    logging.info("Quality plot of %s saved", fastq)
+    plt.savefig(f"Quality_{fastq_file}.png")
+    logging.info("Quality plot of %s saved", fastq_file)
 
 
 def calculate_sequence_complexity(seq):
@@ -183,12 +185,12 @@ def calculate_sequence_complexity(seq):
     return len(kmers) / (len(seq) - 3)
 
 
-def plot_sequence_complexity(fastqfile):
+def plot_sequence_complexity(fastq_file):
     """
     Calculate and plot the sequence complexity of each sequence in a fastq file.
 
     Parameters:
-    fastq (str): The path of a fastq file.
+    fastq_file (str): The path of a fastq file.
 
     Returns:
     None
@@ -196,20 +198,20 @@ def plot_sequence_complexity(fastqfile):
     # Create a new figure and axes for each plot
     plt.figure()
     complexities = []
-    for seqrecord in SeqIO.parse(fastqfile, "fastq"):
+    for seqrecord in SeqIO.parse(fastq_file, "fastq"):
         complexities.append(calculate_sequence_complexity(str(seqrecord.seq)))
 
     # Plot histogram of sequence complexities
     sns.histplot(complexities, bins=50, kde=True, color="black", edgecolor="black",
                  linewidth=0.5)
-    plt.title(f"The sequence complexity of {fastqfile}", fontsize=16)
+    plt.title(f"The sequence complexity of {fastq_file}", fontsize=16)
     plt.xlabel("Sequence complexity", fontsize=14)
     plt.ylabel("Density", fontsize=14)
     sns.set_style("whitegrid")
 
     # Save plot to file and display it
-    plt.savefig(f"sequence_complexity_{fastqfile}.png")
-    logging.info("Sequence complexity plot of %s saved", fastqfile)
+    plt.savefig(f"sequence_complexity_{fastq_file}.png")
+    logging.info("Sequence complexity plot of %s saved", fastq_file)
 
     # Print average sequence complexity
     avg_complexity = np.mean(complexities)

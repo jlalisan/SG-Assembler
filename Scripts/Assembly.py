@@ -7,13 +7,13 @@ Usage:
 
 Options:
   -h --help                     Show this help message.
-  --paf_file=<paf_file>         Path to the PAF data set
-  --output_file=<output_file>   Path to the output Fasta data set
-  --graphics                    Display information using the graphics.py script [default: False]
+  --paf_file=<paf_file>         Path to the PAF data set.
+  --output_file=<output_file>   Path to the output Fasta data set.
+  --graphics                    Display information using the graphics.py script. [default: False]
 
 Author: Lisan Eisinga
 Version: 7.5
-Date of Completion: 06-09-2023
+Date of Completion: 11-06-2023
 
 Input data set formats:
 - fastq_file: FastQ data set containing biological sequence and quality score information (MinION).
@@ -216,10 +216,10 @@ def overlap_graph(sequences, overlaps):
 
         return graph
 
-    except KeyError as error:
-        raise KeyError(f"Missing required columns in the overlaps DataFrame: {str(error)}")
-    except ValueError as error:
-        raise ValueError(f"Sequence ID not found in the sequences dictionary: {str(error)}")
+    except KeyError as k_e:
+        raise KeyError(f"Missing required columns in the overlaps DataFrame: {str(k_e)}") from k_e
+    except ValueError as v_e:
+        raise ValueError(f"Sequence ID not found in the sequences dictionary: {str(v_e)}") from v_e
 
 
 def remove_isolated_nodes(graph):
@@ -247,8 +247,8 @@ def remove_isolated_nodes(graph):
 
         return graph
 
-    except TypeError as error:
-        raise TypeError(f"Invalid graph type: {str(error)}")
+    except TypeError as t_e:
+        raise TypeError(f"Invalid graph type: {str(t_e)}") from t_e
 
 
 def dfs(graph):
@@ -321,8 +321,8 @@ def dfs(graph):
 
         return contigs
 
-    except TypeError as error:
-        raise TypeError(f"Invalid graph type: {str(error)}")
+    except TypeError as t_e:
+        raise TypeError(f"Invalid graph type: {str(t_e)}") from t_e
 
 
 def generate_sequence(graph, contigs):
@@ -381,8 +381,8 @@ def generate_sequence(graph, contigs):
 
         return sequences
 
-    except TypeError as error:
-        raise TypeError(f"Invalid argument type: {str(error)}")
+    except TypeError as t_e:
+        raise TypeError(f"Invalid argument type: {str(t_e)}") from t_e
 
 
 def write_to_file(filename, contigs):

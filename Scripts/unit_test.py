@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 """
-Unit test script for the assembly.py
+Unit test script for the assembly.py.
+Used to make sure the output is correct if the code is changed.
 """
 
 __author__ = "Lisan Eisinga"
-__version__ = "1.3.0"
-__date__ = "31-05-2023"
+__version__ = "1.5.0"
+__date__ = "11-06-2023"
 
 # Imports
 import os
