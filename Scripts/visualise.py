@@ -161,7 +161,7 @@ def plot_quality_scores(fastq_file):
                    fontsize=16)
     axis.set_xlabel("Scores of the bases", fontsize=14)
     axis.set_ylabel("Total amount of bases", fontsize=14)
-    axis.grid(True)
+    axis.grid(False)
 
     # Save and show the plot
     plt.savefig(f"Quality_{fastq_file}.png")

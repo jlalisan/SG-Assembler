@@ -89,8 +89,13 @@ def create_paf(fastq_file):
             logging.info("PAF data set %s already exists.", paf_file)
             return paf_file
 
+        # Find the minimap2 executable
+        minimap_executable = subprocess.run('find / -type f -name "minimap2" -executable -print -quit 2>/dev/null',
+                                            shell=True, capture_output=True, text=True)
+        minimap_location = minimap_executable.stdout.strip()
+
         # Create the PAF data set
-        minimap_command = f"./minimap2/minimap2 -x ava-ont {fastq_file} {fastq_file} > {paf_file}"
+        minimap_command = f"{minimap_location} -x ava-ont {fastq_file} {fastq_file} > {paf_file}"
         subprocess.run(minimap_command, shell=True, check=True)
         logging.info("PAF data set %s created.", paf_file)
 
