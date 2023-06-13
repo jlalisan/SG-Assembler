@@ -92,6 +92,6 @@ This statement activates the 'assembly.py' script, which also runs the visualiza
 The parameters are listed above for usage. A complete run with the test data set 'foo-reads.fq' can be done. This data, however, contains dummy data, which means the visualizations will not be optimal since the quality score for each base has been set to 'I'.
 
 ## Contact
-For any questions or issues, please contact the creator as specified below.
+For any questions or issues, please contact the creator as specified below. or resort to the paper that is cited in the [repository](https://github.com/GijsBakker/CHIMAS) in which SLAEP is inplemented.
 * Lisan Eisinga
   * j.l.a.eisinga@st.hanze.nl 
