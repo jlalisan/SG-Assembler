@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 
 """
-Unit test script for the assembly.py.
+Unit test script for fastq_parser module
 Used to make sure the output is correct if the code is changed.
 """
 
 __author__ = "Lisan Eisinga"
 __version__ = "1.5.0"
-__date__ = "11-06-2023"
+__date__ = "26-07-2023"
 
 # Imports
 import os
 import unittest
-import pandas as pd
+
 import networkx as nx
-from assembly import read_fastq_file, create_paf, \
-    parse_paf, overlap_graph, remove_isolated_nodes, \
-    dfs, generate_sequence, write_to_file
+import pandas as pd
+
+from .. import fastq_parser, paf_parser, create_overlap_graph, \
+    dfs_traversal, consensus_generator, file_writer
 
 
 class ReadFastqFileTest(unittest.TestCase):
@@ -39,13 +40,13 @@ class ReadFastqFileTest(unittest.TestCase):
     def test_read_fastq_file_valid_file(self):
         """Test reading a valid FastQ file."""
         expected_sequences = {"seq1": "ACGT", "seq2": "TGCA"}
-        result = read_fastq_file(self.valid_fastq_file)
+        result = fastq_parser.read_fastq_file(self.valid_fastq_file)
         self.assertEqual(result, expected_sequences)
 
     def test_read_fastq_file_invalid_file(self):
         """Test reading a non-existent FastQ file."""
         with self.assertRaises(FileNotFoundError):
-            read_fastq_file(self.invalid_fastq_file)
+            fastq_parser.read_fastq_file(self.invalid_fastq_file)
 
 
 class TestCreatePAF(unittest.TestCase):
@@ -59,7 +60,7 @@ class TestCreatePAF(unittest.TestCase):
             file_handle.write("@read1\nATCG\n+\nAAAA\n")
 
         # Call the function to create the PAF file
-        paf_file = create_paf(fastq_file)
+        paf_file = paf_parser.create_paf(fastq_file)
 
         # Assert that the PAF file exists
         self.assertTrue(os.path.exists(paf_file))
@@ -73,7 +74,7 @@ class TestCreatePAF(unittest.TestCase):
         non_existing_file = "non_existing.fastq"
         # Assert that a FileNotFoundError is raised
         with self.assertRaises(FileNotFoundError):
-            create_paf(non_existing_file)
+            paf_parser.create_paf(non_existing_file)
 
 
 class ParsePafTest(unittest.TestCase):
@@ -105,13 +106,13 @@ class ParsePafTest(unittest.TestCase):
         ]
         expected_df = pd.DataFrame(expected_data, columns=expected_columns)
 
-        result = parse_paf(self.valid_paf_file)
+        result = paf_parser.parse_paf(self.valid_paf_file)
         pd.testing.assert_frame_equal(result, expected_df)
 
     def test_parse_paf_invalid_file(self):
         """Test parsing a non-existent PAF file."""
         with self.assertRaises(FileNotFoundError):
-            parse_paf(self.invalid_paf_file)
+            paf_parser.parse_paf(self.invalid_paf_file)
 
 
 class OverlapGraphTest(unittest.TestCase):
@@ -161,7 +162,7 @@ class OverlapGraphTest(unittest.TestCase):
                                 mapping_quality=0)
 
         # Create the overlap graph and verify the result
-        result_graph = overlap_graph(sequences, overlaps_df)
+        result_graph = create_overlap_graph.overlap_graph(sequences, overlaps_df)
         self.assertEqual(result_graph.nodes, expected_graph.nodes)
         self.assertEqual(result_graph.edges, expected_graph.edges)
 
@@ -185,7 +186,7 @@ class OverlapGraphTest(unittest.TestCase):
 
         # Verify that a KeyError is raised when handling missing columns
         with self.assertRaises(KeyError):
-            overlap_graph(sequences, overlaps_df)
+            create_overlap_graph.overlap_graph(sequences, overlaps_df)
 
     def test_overlap_graph_invalid_sequence_id(self):
         """Test handling an invalid sequence ID in the overlaps DataFrame."""
@@ -213,7 +214,7 @@ class OverlapGraphTest(unittest.TestCase):
 
         # Verify that a ValueError is raised when handling an invalid sequence ID
         with self.assertRaises(ValueError):
-            overlap_graph(sequences, overlaps_df)
+            create_overlap_graph.overlap_graph(sequences, overlaps_df)
 
 
 class RemoveIsolatedNodesTest(unittest.TestCase):
@@ -234,7 +235,7 @@ class RemoveIsolatedNodesTest(unittest.TestCase):
         expected_graph.add_edge("A", "B")
 
         # Perform the removal of isolated nodes and verify the result
-        result_graph = remove_isolated_nodes(graph)
+        result_graph = create_overlap_graph.remove_isolated_nodes(graph)
         self.assertEqual(result_graph.nodes, expected_graph.nodes)
         self.assertEqual(result_graph.edges, expected_graph.edges)
 
@@ -247,7 +248,7 @@ class RemoveIsolatedNodesTest(unittest.TestCase):
         expected_graph = nx.MultiDiGraph()
 
         # Perform the removal of isolated nodes and verify the result
-        result_graph = remove_isolated_nodes(graph)
+        result_graph = create_overlap_graph.remove_isolated_nodes(graph)
         self.assertEqual(result_graph.nodes, expected_graph.nodes)
         self.assertEqual(result_graph.edges, expected_graph.edges)
 
@@ -258,7 +259,7 @@ class RemoveIsolatedNodesTest(unittest.TestCase):
 
         # Verify that a TypeError is raised when removing isolated nodes from an invalid graph type
         with self.assertRaises(TypeError):
-            remove_isolated_nodes(graph)
+            create_overlap_graph.remove_isolated_nodes(graph)
 
 
 class DFSTest(unittest.TestCase):
@@ -281,7 +282,7 @@ class DFSTest(unittest.TestCase):
         expected_contigs = [["A", "B", "C", "D"]]
 
         # Perform the depth-first search (DFS) and verify the result
-        result_contigs = dfs(graph)
+        result_contigs = dfs_traversal.dfs(graph)
         self.assertEqual(expected_contigs, result_contigs)
 
     def test_dfs_multiple_contigs(self):
@@ -299,7 +300,7 @@ class DFSTest(unittest.TestCase):
         expected_contigs = [["A", "B"], ["C", "D"]]
 
         # Perform the depth-first search (DFS) and verify the result
-        result_contigs = dfs(graph)
+        result_contigs = dfs_traversal.dfs(graph)
         self.assertEqual(result_contigs, expected_contigs)
 
     def test_dfs_empty_graph(self):
@@ -311,7 +312,7 @@ class DFSTest(unittest.TestCase):
         expected_contigs = []
 
         # Perform the depth-first search (DFS) and verify the result
-        result_contigs = dfs(graph)
+        result_contigs = dfs_traversal.dfs(graph)
         self.assertEqual(result_contigs, expected_contigs)
 
     def test_dfs_invalid_graph_type(self):
@@ -321,32 +322,30 @@ class DFSTest(unittest.TestCase):
 
         # Verify that a TypeError is raised when performing DFS on an invalid graph type
         with self.assertRaises(TypeError):
-            dfs(graph)
+            dfs_traversal.dfs(graph)
 
 
-class GenerateSequenceTest(unittest.TestCase):
-    """ Unit test for the generation of sequences. """
-
-    def test_generate_sequence(self):
-        """ Tests to see it does not use the same node twice."""
-        # Create a graph
+class TestConsensusGeneration(unittest.TestCase):
+    """ Unit testcase for the contig generation """
+    def test_generate_consensus_sequences(self):
+        """ Builds graph for testing """
+        # Create a test graph
         graph = nx.MultiDiGraph()
-        graph.add_node("A", sequence="AT")
-        graph.add_node("B", sequence="TC")
-        graph.add_node("C", sequence="CG")
-        graph.add_edge("A", "B", alignment_block_length=2)
-        graph.add_edge("B", "C", alignment_block_length=2)
+        graph.add_node("A", sequence="ACGT")
+        graph.add_node("B", sequence="CGTACG")
+        graph.add_node("C", sequence="CGT")
+        graph.add_edge("B", "A", overlap_len=2, alignment_block_length=4)
+        graph.add_edge("B", "C", overlap_len=1, alignment_block_length=3)
 
-        # Create draft contigs
-        draft_contigs = [["A", "B", "C"], ["A", "B", "B", "C"]]
+        contig = ["A", "B", "C"]
 
-        # Call the generate_sequence function
-        accurate_contigs = generate_sequence(graph, draft_contigs)
+        consensus_sequences = consensus_generator.generate_consensus_sequences(graph, [contig])
 
-        # Check the output
-        expected_contigs = ["ATCGCG", "ATCGCG"]
-        self.assertEqual(expected_contigs, accurate_contigs)
+        # Expected result
+        expected_consensus = "ACGTCGT"
 
+        self.assertEqual(len(consensus_sequences), 1)
+        self.assertEqual(expected_consensus, consensus_sequences[0])
 
 class WriteToFileTest(unittest.TestCase):
     """Unit tests for the write_to_file function."""
@@ -358,7 +357,7 @@ class WriteToFileTest(unittest.TestCase):
         filename = "unittest.fasta"
 
         # Call the function
-        write_to_file(filename, contigs)
+        file_writer.write_to_file(filename, contigs)
 
         # Check if the file was created
         self.assertTrue(os.path.exists(filename))

@@ -1,5 +1,5 @@
 # An inside look into a genome assembler #
-The Small Long-read Assembler for Educational Purposes (SLAEP) is a versatile assembler that can assemble the minor data sets into contigs for the genome and visualize the data within the PacBio MinION data set. Because the assembler was entirely written in Python 3.10 and documented, it is excellent for teaching students about genome assembly and the inner workings of an assembler.
+The Small Long-read Assembler for Educational Purposes (_SLAEP_) is a versatile assembler that can assemble the minor data sets into contigs for the genome and visualize the data within the PacBio MinION data set. Because the assembler was entirely written in Python 3.10 and documented, it is excellent for teaching students about genome assembly and the inner workings of an assembler.
 
 ## Table of content
 - [Installation](#installation)
@@ -21,8 +21,6 @@ The packages used for the assembler can be found within the requirements.txt dat
 | Python Library | Version | Usage within the script         |
 | -------------- | --------| --------------------------------|
 | bioPython      | 1.81    | Parsing the FastQ data set.     |
-| collections    | 3.10    | Creating visualization.         |
-| cProfile       | 3.10    | Checking memory efficiency.     |
 | docopt         | 0.6.2   | Creating command line interface.|
 | logging        | 3.10    | Printing of statements.         |
 | matplotlib     | 3.7.1   | Visualizing the plots.          |
@@ -30,20 +28,15 @@ The packages used for the assembler can be found within the requirements.txt dat
 | numpy          | 1.24.3  | Calculating complexity.         |
 | os             | 3.10    | Finding paths to the data set.  |
 | pandas         | 2.0.1   | Parsing PAF data set.           |
-| psutil         | 5.9.5   | Checks run time and efficiency. |
 | scipy          | 1.10.1  | Plotting functions.             |
 | seaborn        | 0.12.1  | Improving plot quality.         |
 | subprocess     | 3.10    | Calling on Minimap2.            |
 | sys            | 3.10    | Setting recursion limit.        |
 | unittest       | 3.10    | Building tests for script.      |
 
-Sixteen packages were used for the script. Each package was used for a specific reason; 
+Thirteen packages were used for the script. Each package was used for a specific reason; 
 
 * BioPython: Package was used for the parsing of the FastQ data set and to put the reads in a dictionary with their read names as an ID.
-
-* Collections: This package collects all the bases from the FastQ data set for visualization.
-
-* cProfile: Used for checking the performance and run time of the script. Outputs a performance.prof data set.
 
 * Docopt: This package was used for the parsing of arguments so that the user can choose what actions the program takes and which are skipped.
 
@@ -58,8 +51,6 @@ Sixteen packages were used for the script. Each package was used for a specific 
 * Os: The Os package was used in the building of the data frame in order to find the correct path to the required information.
 
 * Pandas: The Pandas module was used to gather the data within the PAF data set.
-
-* Psutil: Checks the script's memory usage and outputs this to the user.
 
 * Scipy: Works with seaborn and matplotlib to enhance the quality of the plots for the FastQ data set. 
 
